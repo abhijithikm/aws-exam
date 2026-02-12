@@ -51,7 +51,7 @@ function renderQuestion(q, index) {
   card.className = 'question-card';
 
   card.innerHTML = `
-    <div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="d-flex justify-content-between align-items-start mb-2">
       <div class="question-title">Q${index}. ${q.prompt.question}</div>
       <button class="btn btn-sm btn-outline-info" onclick="showExplanation(${q.id})">
         Explanation
@@ -64,7 +64,8 @@ function renderQuestion(q, index) {
   const optionsContainer = card.querySelector('.options');
   const submitBtn = card.querySelector('.submit-btn');
 
-  let selected = answersMap[q.id] || null;
+  let selected = answersMap[q.id] || [];
+  const isMultiple = q.correct_response.length > 1;
   let submitted = Boolean(answersMap[q.id]);
 
   q.prompt.answers.forEach((ans, i) => {
@@ -78,12 +79,27 @@ function renderQuestion(q, index) {
 
     opt.onclick = () => {
       if (submitted) return;
-      optionsContainer
-        .querySelectorAll('.option')
-        .forEach(o => o.classList.remove('active'));
-      opt.classList.add('active');
-      selected = letter;
+
+      if (isMultiple) {
+        // Toggle selection
+        if (selected.includes(letter)) {
+          selected = selected.filter(x => x !== letter);
+          opt.classList.remove('active');
+        } else {
+          selected.push(letter);
+          opt.classList.add('active');
+        }
+      } else {
+        // Single select
+        optionsContainer
+          .querySelectorAll('.option')
+          .forEach(o => o.classList.remove('active'));
+
+        opt.classList.add('active');
+        selected = [letter];
+      }
     };
+
 
     optionsContainer.appendChild(opt);
   });
@@ -95,7 +111,7 @@ function renderQuestion(q, index) {
   }
 
   submitBtn.onclick = () => {
-    if (!selected) return alert('Select an answer');
+    if (!selected.length) return alert('Select an answer');
 
     // 🚫 Prevent re-submit (critical fix)
     if (answersMap[q.id]) return;
@@ -117,15 +133,25 @@ function renderQuestion(q, index) {
    LOCK QUESTION UI
 ========================= */
 function lockAnsweredQuestion(container, q, selected) {
-  const correctAnswer = q.correct_response[0];
+  const correctAnswers = q.correct_response;
 
   container.querySelectorAll('.option').forEach(o => {
     o.classList.add('disabled');
-    if (o.dataset.value === correctAnswer) o.classList.add('correct');
-    if (o.dataset.value === selected && selected !== correctAnswer)
+
+    const value = o.dataset.value;
+
+    // Mark correct answers
+    if (correctAnswers.includes(value)) {
+      o.classList.add('correct');
+    }
+
+    // Mark wrong selections
+    if (selected.includes(value) && !correctAnswers.includes(value)) {
       o.classList.add('incorrect');
+    }
   });
 }
+
 
 /* =========================
    TIMER
@@ -164,7 +190,15 @@ function recomputeScore() {
   Object.entries(answersMap).forEach(([qid, ans]) => {
     const q = quizData.questions.find(x => x.id == qid);
     if (!q) return;
-    q.correct_response[0] === ans ? correct++ : incorrect++;
+
+    const correctSet = [...q.correct_response].sort().join(',');
+    const answerSet = [...ans].sort().join(',');
+
+    if (correctSet === answerSet) {
+      correct++;
+    } else {
+      incorrect++;
+    }
   });
 
   const total = quizData.questions.length;
@@ -174,6 +208,7 @@ function recomputeScore() {
   correctEl.textContent = correct;
   wrongEl.textContent = incorrect;
 }
+
 
 /* =========================
    STORAGE
